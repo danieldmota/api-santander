@@ -10,9 +10,12 @@ use App\Entity\Transacao;
 use App\Repository\ContaRepository;
 use App\Dto\UsuarioContaDto;
 use App\Repository\TransacaoRepository;
+use DateTime;
+use Doctrine\ORM\EntityManager;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Attribute\MapRequestPayload;
 use Symfony\Component\Routing\Attribute\Route;
 
@@ -24,8 +27,9 @@ final class TransacaoController extends AbstractController
         #[MapRequestPayload(acceptFormat: 'json')]
         TransacaoRealizarDto $entrada,
         ContaRepository $contaRepository,
-        UsuarioContaDto $usuarioContaDto
-    ): JsonResponse
+        UsuarioContaDto $usuarioContaDto,
+        EntityManagerInterface $emi,
+    ): Response
     {
         $erros = [];
         // validar os dados do DTO
@@ -52,10 +56,6 @@ final class TransacaoController extends AbstractController
         
         }
 
-        if (count($erros) > 0){
-            return $this->json($erros, 422);
-        }
-
         $contaOrigem = $contaRepository->findByUsuarioId($entrada->getIdUsuarioOrigem());
         if (!$contaOrigem){
             return $this->json([
@@ -70,6 +70,35 @@ final class TransacaoController extends AbstractController
             ], 404);
         }
 
-        return $this->json("Hello World");
+        $saldoOrigem = (float)$contaOrigem->getSaldo();
+        $saldoDestino = (float)$contaDestino->getSaldo();
+
+        if($saldoOrigem < (float)$entrada->getValor()){
+            return $this->json([
+                'message' => 'Saldo insuficiente'
+            ]);
+        }
+
+        if (count($erros) > 0){
+            return $this->json($erros, 422);
+        }
+        $valor = (float)$entrada->getValor();
+
+        $contaOrigem->setSaldo($saldoOrigem - $valor);
+        $emi->persist($contaOrigem);
+        
+        $contaDestino->setSaldo($saldoDestino + $valor);
+        $emi->persist($contaDestino);
+
+        $transacao= new Transacao();
+        $transacao->setDataHora(new DateTime());
+        $transacao->setValor($entrada->getValor());
+        $transacao->setContaOrigem($contaOrigem);
+        $transacao->setContaDestino($contaDestino);
+
+        $emi->persist($transacao);
+
+        $emi->flush();
+        return new Response(status: 201);
     }
 }
