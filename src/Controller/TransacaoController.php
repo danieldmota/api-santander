@@ -4,6 +4,7 @@ namespace App\Controller;
 
 
 use App\Dto\UsuarioDto;
+use Symfony\Component\HttpFoundation\Request;
 use App\Dto\TransacaoDto;
 use App\Dto\TransacaoRealizarDto;
 use App\Entity\Transacao;
@@ -100,5 +101,46 @@ final class TransacaoController extends AbstractController
 
         $emi->flush();
         return new Response(status: 201);
+    }
+
+    #[Route('/transacoes/extrato/{idUsuario}', name: 'transacoes_extrato', methods: ['GET'])]
+    public function extrato(
+        int $idUsuario,
+        ContaRepository $contaRepository,
+        TransacaoRepository $transacaoRepository
+    ): JsonResponse {
+        $conta = $contaRepository->findByUsuarioId($idUsuario);
+        if (!$conta) {
+            return $this->json(['message' => 'Conta não encontrada'], 404);
+        }
+
+        // Busca todas as transações dessa conta
+        $transacoesOrigem = $transacaoRepository->findBy(['contaOrigem' => $conta]);
+        $transacoesDestino = $transacaoRepository->findBy(['contaDestino' => $conta]);
+
+        $extrato = [];
+
+        foreach ($transacoesOrigem as $transacao) {
+            $extrato[] = [
+                'data' => $transacao->getDataHora()->format('Y-m-d H:i:s'),
+                'valor' => $transacao->getValor(),
+                'enviado para:' => $transacao->getContaDestino()?->getUsuario()?->getNome(), // ajuste se necessário
+            ];
+        }
+
+        foreach ($transacoesDestino as $transacao) {
+            $extrato[] = [
+                'data' => $transacao->getDataHora()->format('Y-m-d H:i:s'),
+                'valor' => $transacao->getValor(),
+                'recebido por' => $transacao->getContaOrigem()?->getUsuario()?->getNome(),
+            ];
+        }
+
+        // Ordena por data decrescente
+        usort($extrato, function ($a, $b) {
+            return strtotime($b['data']) <=> strtotime($a['data']);
+        });
+
+        return $this->json($extrato);
     }
 }
