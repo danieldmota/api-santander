@@ -3,6 +3,7 @@
 namespace App\Repository;
 
 use App\Entity\Transacao;
+use App\Entity\Conta;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -16,6 +17,29 @@ class TransacaoRepository extends ServiceEntityRepository
         parent::__construct($registry, Transacao::class);
     }
 
+
+    public function findTransacoesDeSaida(Conta $conta): array
+    {
+        return $this->createQueryBuilder('t')
+            ->andWhere('t.contaOrigem = :conta')
+            ->setParameter('conta', $conta)
+            ->orderBy('t.data', 'DESC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
+     * Transações onde a conta foi o destino (entrada de dinheiro)
+     */
+    public function findTransacoesDeEntrada(Conta $conta): array
+    {
+        return $this->createQueryBuilder('t')
+            ->andWhere('t.contaDestino = :conta')
+            ->setParameter('conta', $conta)
+            ->orderBy('t.data', 'DESC')
+            ->getQuery()
+            ->getResult();
+    }
     //    /**
     //     * @return Transacao[] Returns an array of Transacao objects
     //     */
