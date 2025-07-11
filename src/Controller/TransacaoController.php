@@ -2,11 +2,13 @@
 
 namespace App\Controller;
 
-
+use App\Dto\ContaDto;
 use App\Dto\UsuarioDto;
 use Symfony\Component\HttpFoundation\Request;
 use App\Dto\TransacaoDto;
+use App\Dto\TransacaoExtratoDto;
 use App\Dto\TransacaoRealizarDto;
+use App\Dto\TransacoesExtratoDto;
 use App\Entity\Transacao;
 use App\Repository\ContaRepository;
 use App\Dto\UsuarioContaDto;
@@ -103,7 +105,7 @@ final class TransacaoController extends AbstractController
         return new Response(status: 201);
     }
 
-    #[Route('/transacoes/extrato/{idUsuario}', name: 'transacoes_extrato', methods: ['GET'])]
+    #[Route('/transacoes/{idUsuario}/extrato', name: 'transacoes_extrato', methods: ['GET'])]
     public function extrato(
         int $idUsuario,
         ContaRepository $contaRepository,
@@ -111,36 +113,48 @@ final class TransacaoController extends AbstractController
     ): JsonResponse {
         $conta = $contaRepository->findByUsuarioId($idUsuario);
         if (!$conta) {
-            return $this->json(['message' => 'Conta não encontrada'], 404);
+            return $this->json(['message' => 'Usuário não encontrado'], 404);
         }
 
-        // Busca todas as transações dessa conta
-        $transacoesOrigem = $transacaoRepository->findBy(['contaOrigem' => $conta]);
-        $transacoesDestino = $transacaoRepository->findBy(['contaDestino' => $conta]);
+        
+        $transacoes = $transacaoRepository->findByContaOrigemOrContaDestino($conta->getId());
 
-        $extrato = [];
+        $saida = [];
 
-        foreach ($transacoesOrigem as $transacao) {
-            $extrato[] = [
-                'data' => $transacao->getDataHora()->format('Y-m-d H:i:s'),
-                'valor' => $transacao->getValor(),
-                'enviado para:' => $transacao->getContaDestino()?->getUsuario()?->getNome(), // ajuste se necessário
-            ];
+        foreach ($transacoes as $transacao) {
+            $transacaoDto = new TransacaoExtratoDto();
+            $transacaoDto->setId($transacao->getId());
+            $transacaoDto->setValor($transacao->getValor());
+            $transacaoDto->setDataHora($transacao->getDataHora());
+
+            if ($conta->getId() === $transacao->getContaOrigem()->getId()){
+                $transacaoDto->setTipo('Enviou');
+            } else if ($conta->getId() === $transacao->getContaDestino()->getId()){
+                $transacaoDto->setTipo("Recebeu");
+            }
+            
+            $origem = $transacao->getContaOrigem();
+            $contaOrigemDto = new ContaDto();
+            $contaOrigemDto->setId($origem->getUsuario()->getId());
+            $contaOrigemDto->setNome($origem->getUsuario()->getNome());
+            $contaOrigemDto->setCpf($origem->getUsuario()->getCpf());
+            $contaOrigemDto->setNumeroConta($origem->getNumero());
+            $transacaoDto->setDestino($contaOrigemDto);
+
+            $destino = $transacao->getContaDestino();
+            $contaDestinoDto = new ContaDto();
+            $contaDestinoDto->setId($destino->getUsuario()->getId());
+            $contaDestinoDto->setNome($destino->getUsuario()->getNome());
+            $contaDestinoDto->setCpf($destino->getUsuario()->getCpf());
+            $contaDestinoDto->setNumeroConta($destino->getNumero());
+
+            $transacaoDto->setDestino($contaDestinoDto);
+
+            
+            array_push($saida, $transacaoDto);
         }
 
-        foreach ($transacoesDestino as $transacao) {
-            $extrato[] = [
-                'data' => $transacao->getDataHora()->format('Y-m-d H:i:s'),
-                'valor' => $transacao->getValor(),
-                'recebido por' => $transacao->getContaOrigem()?->getUsuario()?->getNome(),
-            ];
-        }
 
-        // Ordena por data decrescente
-        usort($extrato, function ($a, $b) {
-            return strtotime($b['data']) <=> strtotime($a['data']);
-        });
-
-        return $this->json($extrato);
+        return $this->json($saida);
     }
 }

@@ -18,28 +18,17 @@ class TransacaoRepository extends ServiceEntityRepository
     }
 
 
-    public function findTransacoesDeSaida(Conta $conta): array
+    public function findByContaOrigemOrContaDestino($idConta): array
     {
         return $this->createQueryBuilder('t')
-            ->andWhere('t.contaOrigem = :conta')
-            ->setParameter('conta', $conta)
-            ->orderBy('t.data', 'DESC')
+            ->where('t.contaOrigem = :id')
+            ->orWhere('t.contaDestino = :id')
+            ->setParameter('id', $idConta)
+            ->orderBy('t.dataHora', 'DESC')
             ->getQuery()
             ->getResult();
     }
 
-    /**
-     * Transações onde a conta foi o destino (entrada de dinheiro)
-     */
-    public function findTransacoesDeEntrada(Conta $conta): array
-    {
-        return $this->createQueryBuilder('t')
-            ->andWhere('t.contaDestino = :conta')
-            ->setParameter('conta', $conta)
-            ->orderBy('t.data', 'DESC')
-            ->getQuery()
-            ->getResult();
-    }
     //    /**
     //     * @return Transacao[] Returns an array of Transacao objects
     //     */
